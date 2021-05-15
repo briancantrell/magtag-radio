@@ -13,6 +13,8 @@ from adafruit_magtag.magtag import MagTag
 from adafruit_display_text import label, wrap_text_to_lines
 from secrets import secrets
 
+from metadata_formatter import parse_metadata
+
 magtag = MagTag()
 
 def owntone_server():
@@ -32,7 +34,7 @@ def owntone_api(method, path):
 def queue_radio_playlist():
   owntone_api("put", "/api/queue/clear")
   owntone_api(
-      "post", 
+      "post",
       "/api/queue/items/add?uris=library:playlist:" + owntone_radio_playlist_id()
       )
 
@@ -69,49 +71,59 @@ def initialize_texts():
     text_color=0x000000,
     text_position=(5, 10),
     text_anchor_point=(0, 0),
+    text_scale=0.5
   )
 
   magtag.add_text(
     text_font="/fonts/Arial-Bold-12.pcf",
     text_color=0x000000,
-    text_position=(5, 60),
+    text_position=(5, 40),
     text_anchor_point=(0, 0),
   )
 
-def initialize_album_label():
-  album_label = label.Label(
-    terminalio.FONT, 
-    text="Starting...", 
-    color=0x000000,
-    scale=1
+  magtag.add_text(
+    text_font="/fonts/Arial-12.bdf",
+    text_color=0x000000,
+    text_position=(5, 70),
+    text_anchor_point=(0, 0),
   )
-  album_label.anchor_point = (0, 0)
-  album_label.anchored_position = (0, 10)
-  group = displayio.Group(max_size=3, x=10, y=10)
-  group.append(album_label)
-  magtag.splash.append(group)
-  return album_label
+
+# def initialize_album_label():
+#   album_label = label.Label(
+#     terminalio.FONT,
+#     text="Starting...",
+#     color=0x000000,
+#     scale=1
+#   )
+#   album_label.anchor_point = (0, 0)
+#   album_label.anchored_position = (0, 10)
+#   group = displayio.Group(max_size=3, x=10, y=10)
+#   group.append(album_label)
+#   magtag.splash.append(group)
+#   return album_label
 
 def display_status():
+  print("refreshing")
+
   status_response = owntone_api("get", "/api/player")
   status_json = status_response.json()
   current_playing_item_id = status_json["item_id"]
-  current_state = status_json["state"]
-  current_volume = status_json["volume"]
+  # current_state = status_json["state"]
+  # current_volume = status_json["volume"]
   item = find_currently_play_item(queue(), current_playing_item_id)
   print(item)
+  display_lines = parse_metadata(item)
+  print(display_lines)
 
-  artist = "\n".join(wrap_text_to_lines(item["album_artist"], 35)) 
-  magtag.set_text(artist, 0, False)
-
-  album = "\n".join(wrap_text_to_lines(item["album"], 35))
-  magtag.set_text(album, 1, False)
+  magtag.set_text(display_lines['line1'], 0, False)
+  magtag.set_text(display_lines['line2'], 1, False)
+  magtag.set_text(display_lines['line3'], 2, False)
 
   magtag.display.refresh()
 
 def start_deep_sleep():
-  album_label.text = "Sleeping...zzz zzz zzz"
-  magtag.display.refresh()
+  magtag.set_text("Sleeping...zzz zzz zzz", 0, False)
+  magtag.set_text("", 1, False)
   magtag.peripherals.deinit()
   pin_alarm = alarm.pin.PinAlarm(pin=board.BUTTON_A, value=False, pull=True)
   alarm.exit_and_deep_sleep_until_alarms(pin_alarm)
@@ -153,6 +165,7 @@ while awake:
     if magtag.peripherals.button_d_pressed == True:
       volume_up()
       display_status()
-    if i % 2000 == 0:
+    if i % 300 == 0:
+      # 30 seconds
       i=0
       display_status()
